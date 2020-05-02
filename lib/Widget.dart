@@ -225,7 +225,8 @@ class _DropdownTextState extends State<DropdownText> {
           _controller.text = list[index];
         });
       },
-      child: Container(
+      child: Card(
+        elevation: 0.0,
         margin: EdgeInsets.symmetric(horizontal: 13.0, vertical: 0.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
