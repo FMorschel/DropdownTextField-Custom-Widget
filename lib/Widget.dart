@@ -231,14 +231,8 @@ class _DropdownTextState extends State<DropdownText> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Row(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: <Widget>[
-                Text(list[index],
-                  style: widget.textStyle ?? _textStyle,
-                )
-              ],
+            Text(list[index],
+              style: widget.textStyle ?? _textStyle,
             ),
             Divider(color: Colors.blueGrey[700],),
           ],
