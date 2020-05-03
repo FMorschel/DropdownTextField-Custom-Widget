@@ -34,8 +34,8 @@ class DropdownText extends StatefulWidget {
 
 class _DropdownTextState extends State<DropdownText> {
 
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
   TextEditingController _controller;
-
   FocusNode _focusNode;
 
   BorderStyle border = BorderStyle.none;
@@ -45,6 +45,7 @@ class _DropdownTextState extends State<DropdownText> {
   Color iconColor = Colors.blueGrey;
   double size;
   List<String> options;
+  List<String> list = [];
   bool caseSensitive;
   bool label;
 
@@ -64,10 +65,17 @@ class _DropdownTextState extends State<DropdownText> {
     else _focusNode = FocusNode();
     options = widget.options;
     _focusNode.addListener(listener);
-    _controller.addListener(listener);
+    _controller.addListener(controllerListener);
     caseSensitive = widget.caseSensitive ?? false;
     label = widget.label ?? false;
     size = 25.0;
+  }
+
+  void controllerListener(){
+    if(_focusNode.hasFocus){
+      _show = true;
+      _editList(_show);
+    }
   }
 
   void listener(){
@@ -76,9 +84,8 @@ class _DropdownTextState extends State<DropdownText> {
         _show = true;
       });
     }else{
-      setState(() {
-        _show = false;
-      });
+      _show = false;
+      setState(() {});
     }
   }
 
@@ -131,6 +138,7 @@ class _DropdownTextState extends State<DropdownText> {
         setState(() {
           if(!_focusNode.hasFocus){
             _show = !_show;
+            _editList(_show, text: "");
           }
         });
       },
@@ -174,7 +182,7 @@ class _DropdownTextState extends State<DropdownText> {
                     _button(),
                   ],
                 ),
-                _showList(_show, text: _focusNode.hasFocus ? _controller.text.trim() ?? "": ""),
+                _showList(_show),
               ],
             ),
           ),
@@ -183,17 +191,46 @@ class _DropdownTextState extends State<DropdownText> {
     );
   }
 
-  Widget _showList(bool show, {String text = ""}){
+  void _editList(bool show, {String text}){
 
-    List<String> list = [];
-
-    options.forEach((option){
-      if(caseSensitive ? option.startsWith(text) : option.toLowerCase().startsWith(text.toLowerCase())){
-        list.add(option);
+    String _text = text ?? _controller.text.trim() ?? "";
+    int index = 0;
+    bool rem = false;
+    if(show){
+      while(index < list.length){
+        if(!(caseSensitive ? list[index].startsWith(_text) : list[index].toLowerCase().startsWith(_text.toLowerCase()))){
+          AnimatedListRemovedItemBuilder builder = (context, animation) => _itemCard(context, index, animation);
+          list.removeAt(index);
+          _listKey.currentState.removeItem(index, builder);
+          index--;
+          rem = true;
+        }
+        index++;
       }
-    });
+      if(!rem){
+        index = list.length;
+        options.forEach((option){
+          if(caseSensitive ? option.startsWith(_text) : option.toLowerCase().startsWith(_text.toLowerCase())){
+            if(!list.contains(option)){
+              list.add(option);
+              _listKey.currentState.insertItem(index);
+              index++;
+            }
+          }
+        });
+      }
+    }
 
-    if(list.length > 0 && show){
+  }
+
+  Widget _showList(bool show){
+
+    if(show){
+      
+      options.forEach((option){
+        list.add(option);
+      });
+
       return Column(
         children: <Widget>[
           Padding(
@@ -202,11 +239,12 @@ class _DropdownTextState extends State<DropdownText> {
           ),
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: widget.maxlistHeight ?? 200, minHeight: 1.0),
-            child: ListView.builder(
-              itemCount: list.length,
-              itemBuilder: (context, index){
-                return _itemCard(context, index, list);
-              }
+            child: AnimatedList(
+              key: _listKey,
+              initialItemCount: list.length,
+              itemBuilder: (BuildContext context, int index, Animation animation) {
+                return _itemCard(context, index, animation);
+              },
             ),
           ),
         ],
@@ -217,7 +255,7 @@ class _DropdownTextState extends State<DropdownText> {
 
   }
 
-  Widget _itemCard(BuildContext context, int index, List<String> list){
+  Widget _itemCard(BuildContext context, int index, Animation animation){
 
     return GestureDetector(
       onTap: (){
