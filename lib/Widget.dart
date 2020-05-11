@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'dart:async';
 
 class DropdownText extends StatefulWidget {
 
@@ -22,11 +23,14 @@ class DropdownText extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
 
+  final Duration delayTime;
+  final bool delay;
+
   const DropdownText({Key key, this.border, this.borderColor, this.borderWidth,
     this.borderRadius, this.padding, @required this.options, this.iconColor, 
     this.textStyle, this.iconSize, this.maxlistHeight, this.caseSensitive,
     this.label, this.labelText, this.controller, 
-    this.focusNode}) : super(key: key);
+    this.focusNode, this.delayTime, this.delay}) : super(key: key);
 
   @override
   _DropdownTextState createState() => _DropdownTextState();
@@ -49,7 +53,11 @@ class _DropdownTextState extends State<DropdownText> {
   bool caseSensitive;
   bool label;
 
+  Duration delayTime;
+  bool delay;
+
   bool _show = false;
+  String input = "";
 
   TextStyle _textStyle = TextStyle(
     color: Colors.black,
@@ -64,29 +72,38 @@ class _DropdownTextState extends State<DropdownText> {
     if (widget.focusNode != null) _focusNode = widget.focusNode;
     else _focusNode = FocusNode();
     options = widget.options;
-    _focusNode.addListener(listener);
+    _focusNode.addListener(focusListener);
     _controller.addListener(controllerListener);
     caseSensitive = widget.caseSensitive ?? false;
     label = widget.label ?? false;
     size = 25.0;
+    delay = widget.delay ?? true;
+    delayTime = widget.delayTime ?? Duration(milliseconds: 100);
   }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
 
   void controllerListener(){
     if(_focusNode.hasFocus){
-      _show = true;
-      _editList(_show);
+      if(input.length != _controller.text.length){
+        _show = true;
+        _editList();
+      }
+      input = _controller.text;
     }
   }
 
-  void listener(){
+  void focusListener(){
     if(_focusNode.hasFocus){
-      setState(() {
-        _show = true;
-      });
-    }else{
-      _show = false;
-      setState(() {});
-    }
+      _show = true;
+    }else _show = false;
+    setState(() {});
   }
 
   BoxDecoration _boxDecoration(){
@@ -135,12 +152,14 @@ class _DropdownTextState extends State<DropdownText> {
 
     return GestureDetector(
       onTap: () {
-        setState(() {
-          if(!_focusNode.hasFocus){
-            _show = !_show;
-            _editList(_show, text: "");
-          }
-        });
+        if(!_focusNode.hasFocus){
+          _show = !_show;
+          if(_listKey.currentState != null) _editList(text: "");
+        }else{
+          _show = false;
+          if(_focusNode.hasFocus) _focusNode.unfocus();
+        }
+        setState(() {});
       },
       child: Padding(
         padding: const EdgeInsets.all(8.0),
@@ -182,7 +201,7 @@ class _DropdownTextState extends State<DropdownText> {
                     _button(),
                   ],
                 ),
-                _showList(_show),
+                _showList(),
               ],
             ),
           ),
@@ -191,45 +210,82 @@ class _DropdownTextState extends State<DropdownText> {
     );
   }
 
-  void _editList(bool show, {String text}){
+  bool removeItems(String text){
+    Future<Null> future = Future(() {});
+    bool rem = false;
+
+    for (int i =  list.length - 1; i >= 0; i--) {
+      if(!(caseSensitive ? list[i].startsWith(text) : list[i].toLowerCase().startsWith(text.toLowerCase()))){
+        rem = true;
+        if(delay){
+          future = future.then((_) {
+            return Future.delayed(delayTime, () {
+              final String deletedItem = list.removeAt(i);
+              _listKey.currentState.removeItem(
+                i,
+                (BuildContext context, Animation<double> animation) => _removeAnimation(context, deletedItem, animation)
+              );
+            });
+          });
+        }else{
+          final String deletedItem = list.removeAt(i);
+          _listKey.currentState.removeItem(
+            i, 
+            (BuildContext context, Animation<double> animation) => _removeAnimation(context, deletedItem, animation)
+          );
+        }
+      }
+    }
+    return rem;
+  }
+
+  void insertItems(String text){
+    Future<Null> future = Future(() {});
+    int index = list.length;
+
+    for(int i = 0; i < options.length; i++){
+      if(caseSensitive ? options[i].startsWith(text) : options[i].toLowerCase().startsWith(text.toLowerCase())
+      && !list.contains(options[i])){
+        if(delay){
+          future = future.then((_) {
+            return Future.delayed(delayTime, () {
+              list.add(options[i]);
+              _listKey.currentState.insertItem(index++);
+            });
+          });
+        }else{
+          list.add(options[i]);
+          _listKey.currentState.insertItem(index++);
+        }
+      }
+    }
+  }
+
+  void _editList({String text}){
 
     String _text = text ?? _controller.text.trim() ?? "";
-    int index = 0;
     bool rem = false;
-    if(show){
-      while(index < list.length){
-        if(!(caseSensitive ? list[index].startsWith(_text) : list[index].toLowerCase().startsWith(_text.toLowerCase()))){
-          AnimatedListRemovedItemBuilder builder = (context, animation) => _itemCard(context, index, animation);
-          list.removeAt(index);
-          _listKey.currentState.removeItem(index, builder);
-          index--;
-          rem = true;
-        }
-        index++;
-      }
-      if(!rem){
-        index = list.length;
-        options.forEach((option){
-          if(caseSensitive ? option.startsWith(_text) : option.toLowerCase().startsWith(_text.toLowerCase())){
-            if(!list.contains(option)){
-              list.add(option);
-              _listKey.currentState.insertItem(index);
-              index++;
-            }
-          }
-        });
-      }
+    if(_show){
+      rem = removeItems(_text);
+      if(!rem) insertItems(_text);
     }
 
   }
 
-  Widget _showList(bool show){
+  Widget _showList(){
 
-    if(show){
+    if(_show){
       
-      options.forEach((option){
+      if(list.length == 0) options.forEach((option){
         list.add(option);
       });
+      if(_controller.text.trim().isNotEmpty){
+        for (int i =  list.length - 1; i >= 0; i--) {
+          if(!(caseSensitive ? list[i].startsWith(_controller.text.trim()) : list[i].toLowerCase().startsWith(_controller.text.trim().toLowerCase()))){
+            list.removeAt(i);
+          }
+        }
+      }
 
       return Column(
         children: <Widget>[
@@ -241,27 +297,55 @@ class _DropdownTextState extends State<DropdownText> {
             constraints: BoxConstraints(maxHeight: widget.maxlistHeight ?? 200, minHeight: 1.0),
             child: AnimatedList(
               key: _listKey,
+              shrinkWrap: true,
               initialItemCount: list.length,
               itemBuilder: (BuildContext context, int index, Animation animation) {
-                return _itemCard(context, index, animation);
+                return _buildAnimation(context, index, animation);
               },
             ),
           ),
         ],
       );
     }else{
-      return SizedBox(width: 1.0, height: 1.0,);
+      return SizedBox(width: 0.0, height: 0.0,);
     }
 
   }
 
-  Widget _itemCard(BuildContext context, int index, Animation animation){
+  Widget _removeAnimation(BuildContext context, String text, Animation<double> animation){
+    return SlideTransition(
+      position: animation.drive(
+        Tween(
+          begin: Offset(1, 0),
+          end: Offset(0, 0),
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+      ),
+      child: _itemCard(context, text),
+    );
+  } 
+
+  Widget _buildAnimation(BuildContext context, int index, Animation<double> animation){
+
+    return SlideTransition(
+      position: animation.drive(
+        Tween(
+          begin: Offset(1, 0),
+          end: Offset(0, 0),
+        ).chain(CurveTween(curve: Curves.easeIn)),
+      ),
+      child: _itemCard(context, list[index]),
+    );
+
+  }
+
+  Widget _itemCard(BuildContext context, String text){
 
     return GestureDetector(
       onTap: (){
-        setState(() {
-          _controller.text = list[index];
-        });
+        _show = false;
+        setState(() {});
+        if(_focusNode.hasFocus) _focusNode.unfocus();
+        _controller.text = text;
       },
       child: Card(
         elevation: 0.0,
@@ -273,7 +357,7 @@ class _DropdownTextState extends State<DropdownText> {
               mainAxisSize: MainAxisSize.max,
               mainAxisAlignment: MainAxisAlignment.start,
               children: <Widget>[
-                Text(list[index],
+                Text(text,
                   style: widget.textStyle ?? _textStyle,
                 )
               ],
