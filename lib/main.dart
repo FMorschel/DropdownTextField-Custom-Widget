@@ -47,7 +47,7 @@ class _DropdownTextFieldPageState extends State<DropdownTextFieldPage> {
                 border: BorderStyle.solid,
                 padding: EdgeInsets.all(10.0),
                 label: true,
-                labelText: "Teste:",
+                labelText: Text("Teste:"),
               ),
             ],
           ),
