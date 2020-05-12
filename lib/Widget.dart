@@ -1,36 +1,81 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'dart:async';
 
 class DropdownText extends StatefulWidget {
 
-  final TextStyle textStyle;
-  final bool label;
-  final String labelText;
-
-  final BorderStyle border;
+  final bool autocorrect;
+  final bool autofocus;
+  final BorderStyle border;  
   final Color borderColor;
   final double borderWidth;
   final double borderRadius;
-  final EdgeInsets padding;
-
-  final Color iconColor;
-  final double iconSize;
-  final List<String> options;
-  final double maxlistHeight;
-
-  final bool caseSensitive;
+  final Widget Function(BuildContext, {int currentLength, bool isFocused, int maxLength}) buildCounter;
+  final bool caseSensitive;  
   final TextEditingController controller;
-  final FocusNode focusNode;
-
-  final Duration delayTime;
+  final Color cursorColor;
+  final Radius cursorRadius;
+  final double cursorWidth;
+  final InputDecoration decoration; 
   final bool delay;
+  final Duration delayTime;
+  final bool divider;
+  final bool enabled;
+  final bool enableInteractiveSelection;
+  final bool enableSuggestions;
+  final FocusNode focusNode;
+  final Widget icon;
+  final List<TextInputFormatter> inputFormatters;
+  final Widget Function(BuildContext, String) item;
+  final Widget Function(BuildContext, Widget, Animation<double>) itemBuilder;
+  final Widget Function(BuildContext, Widget, Animation<double>) itemRemover;
+  final Brightness keyboardAppearance;
+  final TextInputType keyboardType;
+  final bool label;
+  final Text labelText;
+  final bool listEnabled;
+  final int maxLength;
+  final bool maxLengthEnforced;
+  final int maxLines;
+  final int minLines;
+  final double maxListHeight;
+  final bool obscureText;
+  final void Function(String) onChanged;
+  final void Function() onEditingComplete;
+  final List<String> options;
+  final void Function(String) onSubmitted;
+  final void Function() onTap;
+  final EdgeInsets padding;
+  final ScrollController scrollController;
+  final EdgeInsets scrollPadding;
+  final ScrollPhysics scrollPhysics;
+  final bool showCursor;
+  final StrutStyle strutStyle;
+  final TextAlign textAlign;
+  final TextAlignVertical textAlignVertical;
+  final TextCapitalization textCapitalization;
+  final TextDirection textDirection;
+  final TextInputAction textInputAction;
+  final TextStyle textStyle;
+  final EdgeInsets textPadding;
+  final ToolbarOptions toolbarOptions;
 
-  const DropdownText({Key key, this.border, this.borderColor, this.borderWidth,
-    this.borderRadius, this.padding, @required this.options, this.iconColor, 
-    this.textStyle, this.iconSize, this.maxlistHeight, this.caseSensitive,
-    this.label, this.labelText, this.controller, 
-    this.focusNode, this.delayTime, this.delay}) : super(key: key);
+  const DropdownText({Key key, this.autocorrect, this.autofocus, this.border, 
+    this.borderColor, this.borderWidth, this.borderRadius, this.buildCounter, 
+    this.caseSensitive, this.controller, this.cursorColor, this.cursorRadius, 
+    this.cursorWidth, this.decoration, this.delay, this.delayTime, this.divider, 
+    this.enabled, this.enableInteractiveSelection, this.enableSuggestions, 
+    this.focusNode, this.icon, this.inputFormatters, this.item, this.itemBuilder, 
+    this.itemRemover, this.keyboardAppearance, this.keyboardType, this.label, 
+    this.labelText, this.listEnabled, this.maxLength, this.maxLengthEnforced, 
+    this.maxLines, this.minLines, this.maxListHeight, this.obscureText, 
+    this.onChanged, this.onEditingComplete, @required this.options, this.onSubmitted, 
+    this.onTap, this.padding, this.scrollController, this.scrollPadding, 
+    this.scrollPhysics, this.showCursor, this.strutStyle, this.textAlign, 
+    this.textAlignVertical, this.textCapitalization, this.textDirection, 
+    this.textInputAction, this.textStyle, this.textPadding, this.toolbarOptions}
+    ) : super(key: key);
 
   @override
   _DropdownTextState createState() => _DropdownTextState();
@@ -41,7 +86,7 @@ class _DropdownTextState extends State<DropdownText> {
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
   TextEditingController _controller;
   FocusNode _focusNode;
-
+  bool divider;
   BorderStyle border = BorderStyle.none;
   Color borderColor = Colors.blueGrey;
   double borderWidth = 2.0;
@@ -52,12 +97,15 @@ class _DropdownTextState extends State<DropdownText> {
   List<String> list = [];
   bool caseSensitive;
   bool label;
-
   Duration delayTime;
   bool delay;
-
-  bool _show = false;
+  bool enabled;
+  bool listEnabled;
+  bool _show;
   String input = "";
+  Widget item;
+  Widget builder;
+  Widget remover;
 
   TextStyle _textStyle = TextStyle(
     color: Colors.black,
@@ -79,6 +127,10 @@ class _DropdownTextState extends State<DropdownText> {
     size = 25.0;
     delay = widget.delay ?? true;
     delayTime = widget.delayTime ?? Duration(milliseconds: 100);
+    enabled = widget.enabled ?? true;
+    listEnabled = enabled? widget.listEnabled ?? true : false; 
+    _show = false;
+    divider = widget.divider ?? true;
   }
 
   @override
@@ -88,11 +140,10 @@ class _DropdownTextState extends State<DropdownText> {
     super.dispose();
   }
 
-
   void controllerListener(){
     if(_focusNode.hasFocus){
       if(input.length != _controller.text.length){
-        _show = true;
+        _show = listEnabled;
         _editList();
       }
       input = _controller.text;
@@ -101,7 +152,7 @@ class _DropdownTextState extends State<DropdownText> {
 
   void focusListener(){
     if(_focusNode.hasFocus){
-      _show = true;
+      _show = listEnabled;
     }else _show = false;
     setState(() {});
   }
@@ -123,14 +174,46 @@ class _DropdownTextState extends State<DropdownText> {
 
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12.0, 4.0, 4.0, 0.0),
+        padding: widget.textPadding ?? EdgeInsets.fromLTRB(12.0, 4.0, 4.0, 0.0),
         child: TextField(
           style: widget.textStyle ?? _textStyle,
           focusNode: _focusNode,
           controller: _controller,
-          decoration: InputDecoration(
+          decoration: widget.decoration ?? InputDecoration(
             border: InputBorder.none,
           ),
+          buildCounter: widget.buildCounter,
+          autocorrect: widget.autocorrect ?? false,
+          autofocus: widget.autofocus ?? false,
+          cursorColor: widget.cursorColor ?? Colors.black,
+          cursorRadius: widget.cursorRadius,
+          cursorWidth: widget.cursorWidth ?? 2.0,
+          enableInteractiveSelection: widget.enableInteractiveSelection ?? true,
+          enableSuggestions: widget.enableSuggestions ?? false,
+          enabled: enabled,
+          inputFormatters: widget.inputFormatters,
+          keyboardAppearance: widget.keyboardAppearance,
+          keyboardType: widget.keyboardType ?? TextInputType.text,
+          maxLength: widget.maxLength,
+          maxLengthEnforced: widget.maxLengthEnforced ?? true,
+          maxLines: widget.maxLines,
+          minLines: widget.minLines,
+          obscureText: widget.obscureText ?? false,
+          onChanged: widget.onChanged,
+          onEditingComplete: widget.onEditingComplete,
+          onSubmitted: widget.onSubmitted,
+          onTap: widget.onTap,
+          scrollController: widget.scrollController,
+          scrollPadding: widget.scrollPadding ?? EdgeInsets.all(20.0),
+          scrollPhysics: widget.scrollPhysics,
+          showCursor: widget.showCursor,
+          strutStyle: widget.strutStyle,
+          textAlign: widget.textAlign ?? TextAlign.start,
+          textAlignVertical: widget.textAlignVertical,
+          textCapitalization: widget.textCapitalization ?? TextCapitalization.none,
+          textDirection: widget.textDirection,
+          textInputAction: widget.textInputAction,
+          toolbarOptions: widget.toolbarOptions,
         ),
       ),
     );
@@ -139,40 +222,32 @@ class _DropdownTextState extends State<DropdownText> {
 
   Widget _label(){
 
-    return label ? Padding(
-      padding: EdgeInsets.all(size),
-      child: Text(widget.labelText ?? "Label",
-        style: widget.textStyle ?? _textStyle,
-      ),
-    ) : Container(width: 1.0, height: 1.0,);
+    return label ? widget.labelText ?? Container(width: 0.0, height: 0.0,) : Container(width: 0.0, height: 0.0,);
 
   }
 
   Widget _button(){
 
     return GestureDetector(
+      behavior: HitTestBehavior.translucent,
       onTap: () {
-        if(!_focusNode.hasFocus){
-          _show = !_show;
-          if(_listKey.currentState != null) _editList(text: "");
-        }else{
-          _show = false;
-          if(_focusNode.hasFocus) _focusNode.unfocus();
+        if(enabled){
+          if(!_focusNode.hasFocus){
+            _show = listEnabled? !_show : false;
+            if(_listKey.currentState != null) _editList(text: "");
+          }else{
+            _show = false;
+            if(_focusNode.hasFocus) _focusNode.unfocus();
+          }
+          setState(() {});
         }
-        setState(() {});
       },
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: widget.iconSize ?? size, 
-            minWidth: widget.iconSize ?? size,
-          ),
-          child: Icon(
-            Icons.keyboard_arrow_down,
-            color: widget.iconColor ?? iconColor,
-            size: widget.iconSize ?? size,
-          ),
+      child: widget.icon ?? Padding(
+        padding: EdgeInsets.all(8.0),
+        child: Icon(
+          Icons.keyboard_arrow_down,
+          color: iconColor,
+          size: size,
         ),
       ),
     );
@@ -275,7 +350,6 @@ class _DropdownTextState extends State<DropdownText> {
   Widget _showList(){
 
     if(_show){
-      
       if(list.length == 0) options.forEach((option){
         list.add(option);
       });
@@ -286,60 +360,78 @@ class _DropdownTextState extends State<DropdownText> {
           }
         }
       }
-
       return Column(
         children: <Widget>[
-          Padding(
+          divider? Padding(
             padding: EdgeInsets.symmetric(horizontal: 13.0, vertical: 0.0),
             child: Divider(color: Colors.blueGrey[700],),
-          ),
+          ) : Container(width: 0.0, height: 0.0,),
           ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: widget.maxlistHeight ?? 200, minHeight: 1.0),
+            constraints: BoxConstraints(maxHeight: widget.maxListHeight ?? 200, minHeight: 0.0),
             child: AnimatedList(
               key: _listKey,
               shrinkWrap: true,
               initialItemCount: list.length,
-              itemBuilder: (BuildContext context, int index, Animation animation) {
-                return _buildAnimation(context, index, animation);
+              itemBuilder: (context, index, animation) {
+                return _buildAnimation(context, list[index], animation);
               },
             ),
           ),
         ],
       );
-    }else{
-      return SizedBox(width: 0.0, height: 0.0,);
-    }
+    }else return Container(width: 0.0, height: 0.0,);
 
   }
 
   Widget _removeAnimation(BuildContext context, String text, Animation<double> animation){
-    return SlideTransition(
-      position: animation.drive(
-        Tween(
-          begin: Offset(1, 0),
-          end: Offset(0, 0),
-        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
-      ),
-      child: _itemCard(context, text),
-    );
+
+    if(widget.itemRemover != null) remover = widget.itemRemover(context, _itemCard(context, text), animation);
+    else remover = _buildAnimation(context, text, animation);
+    return remover;
+
   } 
 
-  Widget _buildAnimation(BuildContext context, int index, Animation<double> animation){
+  Widget _buildAnimation(BuildContext context, String text, Animation<double> animation){
 
-    return SlideTransition(
-      position: animation.drive(
-        Tween(
-          begin: Offset(1, 0),
-          end: Offset(0, 0),
-        ).chain(CurveTween(curve: Curves.easeIn)),
-      ),
-      child: _itemCard(context, list[index]),
-    );
+    if(widget.itemBuilder != null) builder = widget.itemBuilder(context, _itemCard(context, text), animation);
+    else builder = animationBuilder(context, text, animation, Curves.easeIn);
+    return builder;
 
   }
 
-  Widget _itemCard(BuildContext context, String text){
+  Widget animationBuilder(BuildContext context, String text, Animation<double> animation, Curve curve){
+    return SlideTransition(
+      position: animation.drive(
+        Tween(
+          begin: Offset(1, 0),
+          end: Offset(0, 0),
+        ).chain(CurveTween(curve: curve)),
+      ),
+      child: _itemCard(context, text),
+    );
+  }
 
+  Widget _itemCard(BuildContext context, String text){
+    if(widget.item != null) item = widget.item(context, text);
+    else item = Card(
+      elevation: 0.0,
+      margin: EdgeInsets.symmetric(horizontal: 13.0, vertical: 0.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              Text(text,
+                style: widget.textStyle ?? _textStyle,
+              )
+            ],
+          ),
+          Divider(color: Colors.blueGrey[700],),
+        ],
+      ),
+    );
     return GestureDetector(
       onTap: (){
         _show = false;
@@ -347,25 +439,7 @@ class _DropdownTextState extends State<DropdownText> {
         if(_focusNode.hasFocus) _focusNode.unfocus();
         _controller.text = text;
       },
-      child: Card(
-        elevation: 0.0,
-        margin: EdgeInsets.symmetric(horizontal: 13.0, vertical: 0.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Row(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: <Widget>[
-                Text(text,
-                  style: widget.textStyle ?? _textStyle,
-                )
-              ],
-            ),
-            Divider(color: Colors.blueGrey[700],),
-          ],
-        ),
-      ),
+      child: item,
     );
 
   }
